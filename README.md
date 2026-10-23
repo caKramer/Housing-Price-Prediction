@@ -2,26 +2,32 @@
 
 Utilizes a dataset of housing prices to practice statistical correlation, multiple regression to build a regression model to infer sale price. 
 
-Includes:
+## Includes:
 
-EDA 
-Plotting
-Scatter
-Histogram
-Density plot
-Box plot
+- EDA 
+- Plotting
+- Scatter
+- Histogram
+- Density plot
+- Box plot
 
-Modeling:
+## Modeling:
 
-Linear Regression to predict price based on ‘area’ 
-Plotted 
-residuals vs predicted
-QQ Plot
-Linear Regression model using multiple predictor variables to predict sale price
-Plotted
-residuals vs predicted
-QQ Plot
+### Linear Regression to predict price based on ‘area’ 
 
-Compared both models and performed ANOVA testing
+- Plotted 
+  - residuals vs predicted
+  - QQ Plot
 
-Written in R. 
+___
+
+### Linear Regression model using multiple predictor variables to predict sale price
+
+- Plotted
+  - residuals vs predicted
+  - QQ Plot
+___
+
+#### Compared both models and performed ANOVA testing
+
+**Written in R**
