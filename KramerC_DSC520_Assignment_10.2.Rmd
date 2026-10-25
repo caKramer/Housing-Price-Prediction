@@ -1,6 +1,5 @@
 ---
-title: "DSC 520"
-author: "Callista Kramer"
+author: "CK"
 date: "`r Sys.Date()`"
 output: html_document
 ---
