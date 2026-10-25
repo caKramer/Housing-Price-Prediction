@@ -1,0 +1,368 @@
+---
+title: "DSC 520"
+author: "Callista Kramer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Instructions
+
+Using the Housing Prices dataset use your skills in statistical correlation, multiple regression, and R programming, to build a regression model to infer Sale Price. This is referred to as “price” in the dataset.
+
+As part of your work, complete the following tasks:
+
+* Explain any transformations or modifications you made to the dataset.
+* Create a linear regression model where “area” infers price (i.e., area is used to predict price).
+* Get a summary of your first model and explain your results (e.g., R2, adj R2, RMSE, MSE).
+* Get the residuals of your model (you can use ‘resid’ or ‘residuals’ functions) and plot them.
+  * What does the plot tell you about your predictions?
+* Use a qq plot to observe your residuals. 
+  * Do your residuals meet the normality assumption?
+* Create a linear regression model that uses multiple predictor variables to predict Sale Price (feel free to derive new predictors from existing ones).   
+  * Explain why you think each of these variables may add explanatory value to the model.
+* Get a summary of this GLM and explain your results.
+* Get the residuals of your second model (you can use ‘resid’ or ‘residuals’ functions) and plot them. 
+  * What does the plot tell you about your predictions?
+* Use a qq plot to observe your residuals. Do your residuals meet the normality assumption?
+* Compare the results (e.g., R2, adj R2, RMSE, MSE) between your first and second model. Does your new model show an improvement over the first?
+  * To confirm a ‘significant’ improvement between the second and first model, use ANOVA to compare them. 
+  * What are the results?
+
+### Setup
+
+```{r}
+#install.packages("lubridate")
+#install.packages("dplyr")
+#install.packages("car")
+#install.packages("broom")
+# install.packages("Hmisc")
+# install.packages("psych")
+
+
+suppressPackageStartupMessages(library(broom))
+suppressPackageStartupMessages(library(car))
+suppressPackageStartupMessages(library(readr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(Hmisc))
+suppressPackageStartupMessages(library(psych))
+
+```
+
+First we will load the data and validate.
+
+```{r}
+# first we will import the dataset
+# I have my file in the same directory as my RStudio environment
+housing <- read_csv("Housing.csv")
+# Let's check and see what the data looks like
+housing
+```
+
+### Explain any transformations or modifications you made to the dataset
+
+Sounds like I need to do some Exploratory Data Analysis (EDA) to determine if I am missing variables or anything else.
+
+I found this great library called Hmisc that can summarize variables, showing the number of non-missing values, unique values, mean, and frequencies. It will show summary statistics for both numeric and categorical data.
+
+Reference: [Geeks For Geeks](https://www.geeksforgeeks.org/r-language/describe-function-in-r/)
+
+```{r}
+describe(housing)
+```
+
+Now let's check datatypes 
+
+```{r}
+str(housing)
+```
+I see all the character values here for the categorical variables, this makes sense as the default storage, but I will want these as factors for when I use the `lm()` later. 
+
+**Factor Conversion**
+
+```{r}
+# Convert categorical columns to factors
+housing$mainroad <- as.factor(housing$mainroad)
+housing$guestroom <- as.factor(housing$guestroom)
+housing$basement <- as.factor(housing$basement)
+housing$hotwaterheating <- as.factor(housing$hotwaterheating)
+housing$airconditioning <- as.factor(housing$airconditioning)
+housing$prefarea <- as.factor(housing$prefarea)
+housing$furnishingstatus <- as.factor(housing$furnishingstatus)
+
+```
+
+
+**Checking for missing values in dataframe**
+
+sum will let me see the total missing values in the entire data frame and can be used with the `is.na()`. TRUE=1, FALSE=0
+
+```{r}
+sum(is.na(housing))
+```
+Ok, no missing values since FALSE=0
+
+**Check for duplicates**
+
+```{r}
+
+# check for duplicates
+sum(duplicated(housing))
+```
+No duplicates.
+
+So we'll just do a summary now.
+
+```{r}
+summary(housing)
+```
+
+**Plotting**
+
+Let's do some initial plots. I will start with a scatter plot of price and area.
+
+```{r}
+# create a scatter plot of price and area 
+ggplot(data = housing, aes(x = price, y = area, color = area)) +
+  geom_point()
+
+```
+
+Now let's try a histogram of price. This will allow me to see the distribution of the price variable. 
+
+```{r}
+# Create a histogram to check the distribution of house prices
+ggplot(housing, aes(x = price)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  theme_minimal() +
+  labs(title = "Distribution of House Prices",
+       x = "Sale Price",
+       y = "Frequency")
+```
+
+We can see a right-skew to the data with the higher prices. A skewed distribution will often pull the intercept higher as the model will attempt to find a starting point that balances the high value outliers. 
+
+When the dependent variable is skewed, the slopes for variables like area may be exaggerated by the extreme values in the tail, rather than representing the typical home in the dataset. 
+
+Linear regression assumes that the residuals are normally distributed. Since the price is heavily skewed the residuals from the model are likely to also be non-normal. 
+
+
+Now let me try a density plot of the area. This is my primary predictor. The model doesn't require predictors to be normal, but extreme spread can affect the stability of the model.
+
+```{r}
+# Create a density plot for property area
+ggplot(housing, aes(x = area)) +
+  geom_density(fill = "pink", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Density Distribution of Property Area",
+       x = "Area (sq ft)",
+       y = "Density")
+```
+
+I can see a very right-skew in the data here as well so there are few very large properties for sale. This shows the spread in my predictors. Properties in the far-right tail of the area distribution will act as high leverage points. They have a disproportionate influence on the calculation of the $\beta$ coefficient for area. If these large area homes don't have a correspondingly large price it will pull the regression line down and weaken the $\beta$ estimate for the rest of the dataset.
+
+
+
+Now a boxplot of price by the categorical variables. This will allow me to see the distribution of house price based on the presence or absence of a feature.
+
+```{r}
+# Boxplot of Price by Air Conditioning
+ggplot(housing, aes(x = airconditioning, y = price, fill = airconditioning)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Price Distribution by Air Conditioning Status",
+       x = "Air Conditioning",
+       y = "Sale Price")
+
+# Boxplot of Price by Preferred Area
+ggplot(housing, aes(x = prefarea, y = price, fill = prefarea)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Price Distribution by Preferred Area Status",
+       x = "Preferred Area",
+       y = "Sale Price")
+```
+
+These plots allow me to see the outliers above the whiskers of the boxplot. The Yes box does seem a bit taller than the no box, which would indiacte that the impact of that feature is inconsistent and can contribute to heteroscedasticity when it comes to residuals. 
+
+When I run a linear regression model the intercept represents the price when categorical variables are 'no.' Having a boxplot show the significantly higher median for 'yes' indicates to me that the model will most likely assign a large positive $\beta$ coefficient to that variable to account for the price jump.
+
+
+### Create a linear regression model where "area" infers price
+
+In R, we use the `lm()` function to create a linear model. The syntax price ~ area indicates that price is the dependent variable and area is the predictor.
+
+
+
+```{r}
+model1 <- lm(price ~ area, data = housing)
+summary(model1)
+```
+
+#### Get a summary of the first model and explain the results
+
+* **Intercept** : approximately 2,387,000. Theoretically this represents the baseline price of a property with zero area.
+
+* **Coefficient for Area** : This indicates that for every one-unit increase in area the sale price is expected to increase by approximately $462.00, with all other factors being constant.
+
+* **Statistical Significance** : Both the intercept and the area variable have p-values of $<2e-16$ (Indicated by the `***` significance code). This means the relationship between area and price is highly statistically significant
+
+* **$R^2$ Coefficient of Determination** : $\alpha=0.2873$ This means that approximately 28.7% of the variation in house prices can be explained by the size of the area alone
+
+* **Adjusted $R^2$** : $\beta = 0.286$ This is similar to $R^2$, but is adjusted for the number of predictors. This remains close here because we only have one predictor
+
+* **MSE (Mean Square Error)** : This is the average of the squared residuals
+
+* **RMSE (Root Mean Squared Error)** : This tells me that, on average, the model's price predictions are off by about 1,581,000
+
+* **F-Statistic** : The F-statistic p-value indicates that the model as a whole is a significantly better predictor of price than a model with no predictors (mean only model)
+
+* **Residuals** : The residuals range from -4,867,112 to 7,484,838. The fact that the max residual is significantly further from the median than the Min residual indicates a right-skew. This suggests that the model tends to under-predict the price of high-end luxury homes.
+
+
+### Get the residuals of your model (you can use ‘resid’ or ‘residuals’ functions) and plot them
+
+Plotting the residuals
+
+```{r}
+res1 <- resid(model1)
+plot(fitted(model1), res1, main="Residuals vs Predicted (Model 1)", 
+     xlab="Predicted Price", ylab="Residuals")
+abline(h = 0, col = "red")
+```
+
+#### What does the plot tell you about your predictions?
+
+You can see the sort of fanning that is happening as the house prices increase the errors are getting larger. This is a visual of the heteroscendasticity. This suggests that the area alone is not enough to accurately predict high-value homes. This makes sense after seeing the skew and outliers in all of the original plots that I created. The model is trying to balance the high-value outliers and we can see the issues here with the predictions in price.
+
+This fanning indicates that as house prices increase, the model's error variance increases, which is a common violation of linear regression assumptions in real estate data.
+
+
+### Use a QQ plot to observe your residuals. 
+
+```{r}
+qqnorm(res1)
+qqline(res1, col = "red")
+```
+
+#### Do your residuals meet the normality assumption?
+
+The residuals show some deviation from the red line at the tails (ends). This means the residuals are not perfectly normal, most likely due to high-priced outliers in the dataset.
+
+
+### Create a linear regression model that uses multiple predictor variables to predict Sale Price
+
+Picking variables: 
+
+#### Explain why you think each of these variables may add explanatory value to the model.
+
+* bedrooms/bathrooms/stories will increase the functional living capacity
+* parking/ac add luxury and convenience value which should significantly impact market price
+* preferred area is a major driving in real estate sales/value, regardless of house size
+
+```{r}
+# Model using multiple predictors
+model2 <- lm(price ~ area + bedrooms + bathrooms + stories + parking + airconditioning + prefarea, data = housing)
+
+summary(model2)
+```
+
+#### Get a summary of this GLM and explain your results.
+
+Here we see a significant improvement due to adding more variables.
+
+* **$R^2$** The model is now explaining 63.93% of the variance in price-- this is a huge jump from the 28.7% I saw previously!
+
+* **Intercept** : The intercept dropped to 93,200 and is no longer statistically significant. This is expected, as the other predictors now account for the bulk of the home's value.
+
+* **Coefficients for Key Predictors** :
+  * **Area** : with other factors accounted for, the impact of area decreased to $264.80/unit
+  * **Bathrooms** : This is one of the strongest predictors- adding a bathroom increases the predicted value by over \$1 Million
+  * **Air conditioning** : Having an AC adds roughly \$869,400 to the predicted price
+  * **Preferred Area** : Being in a preferred area adds approximately \$820,200 in value
+  * **Parking** : Each parking space adds approximately \$337,500
+  * **Bedrooms** : This is significant, even though it has a smaller relative impact than bathrooms or AC
+
+* **RMSE** The average error has dropped significantly (approx $1.11M) compared to model one
+
+### Get the residuals of your second model (you can use ‘resid’ or ‘residuals’ functions) and plot them
+
+```{r}
+res2 <- resid(model2)
+# Residual Plot
+plot(fitted(model2), res2, main="Residuals vs Predicted (Model 2)")
+abline(h = 0, col = "red")
+
+```
+
+#### What does the plot tell you about your predictions?
+
+The residuals are more tightly clustered around zero than Model 1 but some heteroscedasticity remains (as can be seen by some fanning). This tells me that the model is highly accurate for mid-range homes but becomes less certain (so higher variance) as the predicted price increases.
+
+
+### Use a QQ Plot to observe your residuals
+
+```{r}
+# QQ Plot
+qqnorm(res2)
+qqline(res2, col = "red")
+```
+
+#### Do your residuals meet the normality assumption?
+
+The QQ plot is flatter than Model 1, but the heavy tails are still there. The points curve away from the diagonal reference on both the low and high ends. This indicates that the residuals are not perfectly  normally distributed. This tells me that there are high value outliers - which does happen frequently in housing prices (think of those luxury homes that have crazy high prices). These outliers create a 'right-skew'in the price distribution which pulls the residuals away from the normal line at the upper end. 
+
+The model is statistically significant and valid for general inference, the heavy tails are a caution that the standard errors might be slightly underestimated for very expensive properties. 
+
+
+### Compare the results (e.g., R2, adj R2, RMSE, MSE) between your first and second model
+
+| Metric | Model 1 (Simple: Area) | Model 2 (Multiple) | Statistical Improvement |
+| :--- | :--- | :--- | :--- |
+| **$R^2$ ($\alpha$)** | 0.2873 | 0.6468 | +125% increase in variance explained |
+| **Adjusted $R^2$ ($\beta$)** | 0.286 | 0.6416 | Confirms added variables are meaningful |
+| **MSE** | $2.489 \times 10^{12}$ | $1.233 \times 10^{12}$ | ~50% reduction in error variance |
+| **RMSE** | $1,577,613$ | $1,110,548$ | Error reduced by approx. $467,000 |
+
+
+#### Does your new model show an improvement over the first? 
+
+Yes the new model shows significantly better results as we can see in the table I created above. This shows an increase in the variance explained with the $R^2$ and the adjusted $R^2$ shows that the variables I picked were meaningful. The MSE also had about a 50% reduction in error variance while the RMSE had a huge error reduction in price projections.
+
+
+### Compare the results and ANOVA
+
+Model 2 is significantly better. It has a higher $R^2$, a higher Adjusted $R^2$, and a lower RMSE/MSE.
+
+
+#### ANOVA Test
+
+I will do this to statistically confirm if adding the extra variables was 'worth it.'
+
+```{r}
+anova(model1, model2)
+```
+
+##### Interpretation of Results
+
+The ANOVA shows a very small p-value. This confirms that the improvement is statistically significant and the second model provides a much better fit for the data.
+
+**Summary**
+
+* **Model Accuracy** : By adding functional variables like bedroosms, bathrooms, etc and luxury/location indicators the models explanatory power was more than doubled with $r^2$ jumping from 28.7% to 64.7%
+
+* **Error Reduction** : The RMSE shows that while Model 1 was off by over \$1.57M on average, Model 2 narrowed that average error down to \$1.11 M
+
+* **Significance** : The ANOVA test confirms with the p-value that the multiple regression model is a statistically superior fit for the housing data.
+
+
+
+| Metric | Model 1 (Simple: Area) | Model 2 (Multiple) | Statistical Improvement |
+| :--- | :--- | :--- | :--- |
+| **ANOVA ($p$-value)** | Reference Model | $1.249 \times 10^{-77}$ | Highly Significant ($p < 0.05$) |
+
+
