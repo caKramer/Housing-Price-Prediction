@@ -352,7 +352,7 @@ The ANOVA shows a very small p-value. This confirms that the improvement is stat
 
 **Summary**
 
-* **Model Accuracy** : By adding functional variables like bedroosms, bathrooms, etc and luxury/location indicators the models explanatory power was more than doubled with $r^2$ jumping from 28.7% to 64.7%
+* **Model Accuracy** : By adding functional variables like bedrooms, bathrooms, etc and luxury/location indicators the models explanatory power was more than doubled with $r^2$ jumping from 28.7% to 64.7%
 
 * **Error Reduction** : The RMSE shows that while Model 1 was off by over \$1.57M on average, Model 2 narrowed that average error down to \$1.11 M
 
